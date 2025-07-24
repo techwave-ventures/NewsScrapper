@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+motor
+pydantic
+python-dotenv
+httpx
+requests
+beautifulsoup4
