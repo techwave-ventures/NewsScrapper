@@ -22,8 +22,8 @@ HEARTBEAT_INTERVAL_SECONDS = int(os.getenv("HEARTBEAT_INTERVAL_SECONDS", "300"))
 
 # === MongoDB Setup ===
 client = AsyncIOMotorClient(MONGO_URL)
-db = client["newsdb"]
-collection = db["articles"]
+db = client["Techsocial"]
+collection = db["news-articles"]
 
 # === FastAPI App ===
 app = FastAPI()
