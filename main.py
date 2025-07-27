@@ -11,6 +11,7 @@ import httpx
 import asyncio
 import os
 import re
+from fastapi.responses import JSONResponse
 import time
 
 # === Load Environment Variables ===
@@ -37,25 +38,238 @@ class Article(BaseModel):
     category: List[str]
     timestamp: Optional[str] = None
 
-# === Category Map ===
+# === Category Maps ===
 CATEGORY_MAP = {
-    "economy": "economy", "policy": "policy", "finance": "finance", "banking": "finance",
-    "markets": "markets", "stocks": "stocks", "ipos": "ipos", "bonds": "bonds",
-    "crypto": "crypto", "forex": "forex", "industry": "industry", "auto": "auto",
-    "retail": "retail", "real-estate": "real-estate", "energy": "energy", "telecom": "telecom",
-    "manufacturing": "manufacturing", "technology": "technology", "tech": "technology",
-    "ai": "technology", "startups": "startups", "science": "science", "defence": "defence",
-    "politics": "politics", "elections": "politics", "world": "world-news", "international": "world-news",
-    "india": "india", "wealth": "wealth", "education": "education", "career": "career", "jobs": "career",
-    "opinion": "opinion", "sme": "sme", "nri": "nri", "panache": "lifestyle", "environment": "environment",
+    # Economy & Finance
+    "economy": "economy",
+    "policy": "policy",
+    "finance": "finance",
+    "banking": "banking",
+    "markets": "markets",
+    "stocks": "stocks",
+    "ipos": "ipos",
+    "bonds": "bonds",
+    "forex": "forex",
+    "mutual-funds": "mutual-funds",
+    "private-equity": "private-equity",
+    "earnings": "earnings",
+    "corporate-trends": "corporate-trends",
+    "trade": "trade",
+    "fta": "trade", # Alias for trade
+    "foreign-trade": "trade",  # New: Added this entry
+    "indicators": "indicators",
+
+    # Industry & Business
+    "industry": "industry",
+    "auto": "auto",
+    "retail": "retail",
+    "real-estate": "real-estate",
+    "energy": "energy",
+    "telecom": "telecom",
+    "manufacturing": "manufacturing",
+    "aviation": "aviation",
+    "transportation": "transportation",
+    "services": "services",
+    "sme": "sme",
+
+    # Technology & Science
+    "technology": "technology",
+    "tech": "technology", # Alias
+    "ai": "ai",
+    "startups": "startups",
+    "science": "science",
+    "isro": "space", # Specific science sub-category
+    "space": "space",
+    "biotechnology": "biotechnology",
+    "deeptech": "deeptech",
+    "gadgets": "gadgets",
+    "internet": "internet",
+    "software": "software",
+    "robotaxi": "automotive-tech",
+    "starlink": "satellite-internet",
+    "tiktok": "social-media",
+
+    # Politics & Governance
+    "politics": "politics",
+    "politics-and-nation": "politics",
+    "elections": "elections",
+    "government": "governance",
+    "judiciary": "judiciary",
+    "parliament": "parliament",
+
+    # World & International News
+    "world": "world-news",
+    "international": "world-news", # Alias
+    "us": "us-news",
+    "uk": "uk-news",
+    "europe": "europe-news",
+    "asia": "asia-news",
+    "africa": "africa-news",
+    "middle-east": "middle-east-news",
+    "global-trends": "global-trends",
+
+    # India Specific
+    "india": "india",
+    "delhi": "india-regional",
+    "mumbai": "india-regional",
+    "kolkata": "india-regional",
+    "assam": "india-regional",
+    "manipur": "india-regional",
+    "nri": "nri",
+
+    # Social & Lifestyle
+    "wealth": "wealth",
+    "education": "education",
+    "career": "career",
+    "jobs": "career", # Alias
+    "opinion": "opinion",
+    "panache": "lifestyle", # Alias
+    "lifestyle": "lifestyle",
+    "health": "health",
+    "crime": "crime",
+    "astrology": "astrology",
+    "entertainment": "entertainment",
+    "culture": "culture",
+    "food": "food",
+
+    # Environment & Climate
+    "environment": "environment",
+    "global-warming": "climate-change",
+    "pollution": "pollution",
+    "flora-fauna": "wildlife",
+    "climate": "climate-change", # Alias
+    "sustainability": "sustainability",
+
+    # Defence & Security
+    "defence": "defence",
+    "military": "military",
+    "security": "security",
+    "terrorism": "terrorism",
+
+    # Sports
+    "sports": "sports",
+    "cricket": "cricket",
+    "football": "football",
+    "hockey": "hockey",
+    "chess": "chess",
+    "olympics": "olympics",
+    "wwe": "wrestling",
+    "tour-de-france": "cycling",
+
+    # Explainer/Analysis
+    "et-explains": "explainer",
+    "explainer": "explainer", # Alias
+    "analysis": "analysis",
+
+    # Uncategorized/General
+    "new-updates": "general-updates",
+    "general": "general" # Default
 }
+
+BROADER_CATEGORY_RELATIONS = {
+    "policy": "economy",
+    "banking": "finance",
+    "stocks": "markets",
+    "ipos": "markets",
+    "bonds": "markets",
+    "forex": "finance",
+    "mutual-funds": "finance",
+    "private-equity": "finance",
+    "earnings": "markets",
+    "corporate-trends": "industry",
+    "trade": "economy",
+    "indicators": "economy",
+
+    "auto": "industry",
+    "retail": "industry",
+    "real-estate": "industry",
+    "energy": "industry",
+    "telecom": "industry",
+    "manufacturing": "industry",
+    "aviation": "industry",
+    "transportation": "industry",
+    "services": "industry",
+
+    "ai": "technology",
+    "startups": "startup",
+    "startup": "startup",
+    "space": "science",
+    "biotechnology": "science",
+    "deeptech": "technology",
+    "gadgets": "technology",
+    "internet": "technology",
+    "software": "technology",
+    "automotive-tech": "technology",
+    "satellite-internet": "technology",
+    "social-media": "technology",
+
+    "elections": "politics",
+    "governance": "politics",
+    "judiciary": "politics",
+    "parliament": "politics",
+
+    "us-news": "world-news",
+    "uk-news": "world-news",
+    "europe-news": "world-news",
+    "asia-news": "world-news",
+    "africa-news": "world-news",
+    "middle-east-news": "world-news",
+    "global-trends": "world-news",
+
+    "india-regional": "india",
+
+    "wealth": "lifestyle",
+    "education": "social",
+    "career": "social",
+    "health": "social",
+    "crime": "social",
+    "astrology": "lifestyle",
+    "entertainment": "lifestyle",
+    "culture": "lifestyle",
+    "food": "lifestyle",
+
+    "climate-change": "environment",
+    "pollution": "environment",
+    "wildlife": "environment",
+    "sustainability": "environment",
+
+    "military": "defence",
+    "security": "defence",
+    "terrorism": "defence",
+
+    "cricket": "sports",
+    "football": "sports",
+    "hockey": "sports",
+    "chess": "sports",
+    "olympics": "sports",
+    "wrestling": "sports",
+    "cycling": "sports",
+
+    "general-updates": "general"
+}
+
 
 # === Helpers ===
 def detect_categories(href: str, headline: str) -> List[str]:
-    segments = urlparse(href).path.lower().split("/") + [headline.lower()]
-    combined = " ".join(segments)
-    detected = {val for key, val in CATEGORY_MAP.items() if key.replace("-", "") in combined.replace("-", "")}
-    return list(detected or ["general"])
+    segments = urlparse(href).path.lower().split("/")
+    domain_parts = urlparse(href).netloc.lower().split(".")
+    combined = " ".join(segments + [headline.lower()] + domain_parts)
+
+    detected_categories_set = set()
+
+    for key_phrase, specific_category in CATEGORY_MAP.items():
+        # Using word boundaries for more precise matching
+        # Replace hyphens in key_phrase for matching against combined string that also has hyphens removed
+        if re.search(r'\b' + re.escape(key_phrase.replace("-", "")) + r'\b', combined.replace("-", "")):
+            detected_categories_set.add(specific_category)
+
+            # Add broader category if a relation exists
+            broader_cat = BROADER_CATEGORY_RELATIONS.get(specific_category)
+            if broader_cat:
+                detected_categories_set.add(broader_cat)
+
+    return list(detected_categories_set or ["general"])
+
 
 def extract_full_article_text(soup: BeautifulSoup) -> str:
     blocks = soup.find_all("div", class_="Normal") or soup.find_all("p")
@@ -88,7 +302,7 @@ async def fetch_and_process_articles(batch_size: int = 15):
     headers = {"User-Agent": "Mozilla/5.0"}
     base_url = "https://economictimes.indiatimes.com"
     now = datetime.utcnow()
-    cutoff = now - timedelta(hours=1)
+    cutoff = now - timedelta(hours=24)
 
     soup = BeautifulSoup(requests.get(url, headers=headers).text, "html.parser")
     seen, hrefs = set(), []
@@ -197,3 +411,12 @@ async def heartbeat_task():
 async def startup_event():
     asyncio.create_task(heartbeat_task())
     print("🚀 Background task started.")
+
+
+@app.get("/all-refs", response_model=List[str])
+async def get_all_refs():
+    cursor = collection.find({}, {"_id": 0, "ref": 1})
+    refs = []
+    async for doc in cursor:
+        refs.append(doc["ref"])
+    return JSONResponse(content=refs)
