@@ -31,6 +31,18 @@ subscribers_collection = db["subscribers"]
 # === FastAPI App ===
 app = FastAPI()
 
+
+# --- CORS Configuration ---
+# This middleware allows your frontend to make requests to this backend.
+# IMPORTANT: For production, replace "*" with the actual domain of your frontend.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all HTTP methods (GET, POST, etc.)
+    allow_headers=["*"],  # Allows all headers
+)
+
 # === Pydantic Model ===
 class Article(BaseModel):
     headline: str
