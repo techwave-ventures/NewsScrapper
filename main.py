@@ -4,6 +4,7 @@ from typing import List, Optional
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 from motor.motor_asyncio import AsyncIOMotorClient
+
 from urllib.parse import urlparse
 from dotenv import load_dotenv
 import requests
@@ -11,7 +12,9 @@ import httpx
 import asyncio
 import os
 import re
+from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 import time
 
 # === Load Environment Variables ===
