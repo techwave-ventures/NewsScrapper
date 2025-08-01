@@ -25,6 +25,8 @@ HEARTBEAT_INTERVAL_SECONDS = int(os.getenv("HEARTBEAT_INTERVAL_SECONDS", "300"))
 client = AsyncIOMotorClient(MONGO_URL)
 db = client["Techsocial"]
 collection = db["news-articles"]
+# New collection for storing subscriber emails
+subscribers_collection = db["subscribers"]
 
 # === FastAPI App ===
 app = FastAPI()
@@ -37,6 +39,11 @@ class Article(BaseModel):
     ref: str
     category: List[str]
     timestamp: Optional[str] = None
+
+
+# New Pydantic model for a subscriber
+class Subscriber(BaseModel):
+    email: str
 
 # === Category Maps ===
 CATEGORY_MAP = {
@@ -420,3 +427,37 @@ async def get_all_refs():
     async for doc in cursor:
         refs.append(doc["ref"])
     return JSONResponse(content=refs)
+
+
+
+@app.post("/subscribe")
+async def subscribe(subscriber: Subscriber):
+    """
+    Handles a new subscriber request and stores the email in MongoDB.
+    """
+    try:
+        # Check if the email already exists to prevent duplicates
+        existing_subscriber = await subscribers_collection.find_one({"email": subscriber.email})
+        if existing_subscriber:
+            return JSONResponse(
+                status_code=409,  # 409 Conflict
+                content={"success": False, "message": "Email is already subscribed."}
+            )
+
+        # Insert the new subscriber with a timestamp
+        await subscribers_collection.insert_one({
+            "email": subscriber.email,
+            "subscribed_at": datetime.utcnow()
+        })
+        print(f"New subscriber added: {subscriber.email}")
+        return JSONResponse(
+            status_code=200,
+            content={"success": True, "message": "Subscription successful!"}
+        )
+
+    except Exception as e:
+        print(f"An error occurred during subscription: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "message": "An internal server error occurred."}
+        )
