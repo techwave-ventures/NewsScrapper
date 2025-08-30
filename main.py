@@ -26,7 +26,7 @@ HEARTBEAT_INTERVAL_SECONDS = int(os.getenv("HEARTBEAT_INTERVAL_SECONDS", "300"))
 
 # === MongoDB Setup ===
 client = AsyncIOMotorClient(MONGO_URL)
-db = client["Techsocial"]
+db = client["connectx"]
 collection = db["news-articles"]
 # New collection for storing subscriber emails
 subscribers_collection = db["subscribers"]
@@ -475,4 +475,5 @@ async def subscribe(subscriber: Subscriber):
         return JSONResponse(
             status_code=500,
             content={"success": False, "message": "An internal server error occurred."}
+
         )
