@@ -2,7 +2,7 @@ from fastapi import FastAPI, Query
 from pydantic import BaseModel
 from typing import List, Optional
 from bs4 import BeautifulSoup
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from motor.motor_asyncio import AsyncIOMotorClient
 
 from urllib.parse import urlparse
@@ -34,16 +34,13 @@ subscribers_collection = db["subscribers"]
 # === FastAPI App ===
 app = FastAPI()
 
-
 # --- CORS Configuration ---
-# This middleware allows your frontend to make requests to this backend.
-# IMPORTANT: For production, replace "*" with the actual domain of your frontend.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Allows all origins
     allow_credentials=True,
-    allow_methods=["*"],  # Allows all HTTP methods (GET, POST, etc.)
-    allow_headers=["*"],  # Allows all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # === Pydantic Model ===
@@ -78,7 +75,7 @@ CATEGORY_MAP = {
     "corporate-trends": "corporate-trends",
     "trade": "trade",
     "fta": "trade", # Alias for trade
-    "foreign-trade": "trade",  # New: Added this entry
+    "foreign-trade": "trade",
     "indicators": "indicators",
 
     # Industry & Business
@@ -96,11 +93,11 @@ CATEGORY_MAP = {
 
     # Technology & Science
     "technology": "technology",
-    "tech": "technology", # Alias
+    "tech": "technology",
     "ai": "ai",
     "startups": "startups",
     "science": "science",
-    "isro": "space", # Specific science sub-category
+    "isro": "space",
     "space": "space",
     "biotechnology": "biotechnology",
     "deeptech": "deeptech",
@@ -121,7 +118,7 @@ CATEGORY_MAP = {
 
     # World & International News
     "world": "world-news",
-    "international": "world-news", # Alias
+    "international": "world-news",
     "us": "us-news",
     "uk": "uk-news",
     "europe": "europe-news",
@@ -143,9 +140,9 @@ CATEGORY_MAP = {
     "wealth": "wealth",
     "education": "education",
     "career": "career",
-    "jobs": "career", # Alias
+    "jobs": "career",
     "opinion": "opinion",
-    "panache": "lifestyle", # Alias
+    "panache": "lifestyle",
     "lifestyle": "lifestyle",
     "health": "health",
     "crime": "crime",
@@ -159,7 +156,7 @@ CATEGORY_MAP = {
     "global-warming": "climate-change",
     "pollution": "pollution",
     "flora-fauna": "wildlife",
-    "climate": "climate-change", # Alias
+    "climate": "climate-change",
     "sustainability": "sustainability",
 
     # Defence & Security
@@ -180,12 +177,12 @@ CATEGORY_MAP = {
 
     # Explainer/Analysis
     "et-explains": "explainer",
-    "explainer": "explainer", # Alias
+    "explainer": "explainer",
     "analysis": "analysis",
 
     # Uncategorized/General
     "new-updates": "general-updates",
-    "general": "general" # Default
+    "general": "general"
 }
 
 BROADER_CATEGORY_RELATIONS = {
@@ -270,7 +267,6 @@ BROADER_CATEGORY_RELATIONS = {
     "general-updates": "general"
 }
 
-
 # === Helpers ===
 def detect_categories(href: str, headline: str) -> List[str]:
     segments = urlparse(href).path.lower().split("/")
@@ -280,12 +276,8 @@ def detect_categories(href: str, headline: str) -> List[str]:
     detected_categories_set = set()
 
     for key_phrase, specific_category in CATEGORY_MAP.items():
-        # Using word boundaries for more precise matching
-        # Replace hyphens in key_phrase for matching against combined string that also has hyphens removed
         if re.search(r'\b' + re.escape(key_phrase.replace("-", "")) + r'\b', combined.replace("-", "")):
             detected_categories_set.add(specific_category)
-
-            # Add broader category if a relation exists
             broader_cat = BROADER_CATEGORY_RELATIONS.get(specific_category)
             if broader_cat:
                 detected_categories_set.add(broader_cat)
@@ -317,13 +309,14 @@ def extract_full_article_text(soup: BeautifulSoup) -> str:
         text_chunks.append(txt)
     return re.sub(r"\s+", " ", " ".join(text_chunks)).strip() or "No article content found."
 
+
 # === Scraping Logic ===
 async def fetch_and_process_articles(batch_size: int = 15):
     print("🔄 Scraping latest articles...")
     url = "https://economictimes.indiatimes.com/news"
     headers = {"User-Agent": "Mozilla/5.0"}
     base_url = "https://economictimes.indiatimes.com"
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     cutoff = now - timedelta(hours=24)
 
     soup = BeautifulSoup(requests.get(url, headers=headers).text, "html.parser")
@@ -345,13 +338,9 @@ async def fetch_and_process_articles(batch_size: int = 15):
     async def process_url(href: str, client: httpx.AsyncClient):
         try:
             res = await client.get(href, timeout=10)
-
-            # ✅ Skip dead links
             if res.status_code == 404:
-                # print(f"⛔ 404 Not Found: {href}")
                 return
             elif res.status_code != 200:
-                # print(f"⚠️ Skipping ({res.status_code}): {href}")
                 return
 
             soup = BeautifulSoup(res.text, "html.parser")
@@ -364,7 +353,11 @@ async def fetch_and_process_articles(batch_size: int = 15):
             headline = title_tag["content"] if title_tag else "No Title"
             banner = image_tag["content"] if image_tag else None
             timestamp = date_meta["content"] if date_meta else None
-            pub_time = datetime.strptime(timestamp[:19], "%Y-%m-%dT%H:%M:%S") if timestamp else now
+
+            if timestamp:
+                pub_time = datetime.strptime(timestamp[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
+            else:
+                pub_time = datetime.now(timezone.utc)
 
             if pub_time < cutoff:
                 return
@@ -378,15 +371,12 @@ async def fetch_and_process_articles(batch_size: int = 15):
                 "article": summary[:1000],
                 "ref": href,
                 "category": categories,
-                "timestamp": pub_time.strftime("%Y-%m-%d %H:%M:%S")
+                "timestamp": pub_time.isoformat().replace("+00:00", "Z")  # ✅ UTC ISO 8601
             }
 
             if not await collection.find_one({"ref": href}):
                 await collection.insert_one(doc)
-                # print("✅ Inserted:", href)
-                print("✅ Inserted: ", doc)
-            # else:
-                # print("📦 Already exists:", href)
+                print("✅ Inserted:", doc)
 
             articles.append(doc)
 
@@ -401,17 +391,20 @@ async def fetch_and_process_articles(batch_size: int = 15):
     print(f"📤 Total Articles Collected: {len(articles)}")
     return articles
 
+
 # === Public Trigger ===
 @app.get("/latest-news", response_model=List[Article])
 async def get_news(interests: Optional[List[str]] = Query(None)):
     return await fetch_and_process_articles()
 
+
 # === Hailing Route ===
 @app.get(HAILING_ENDPOINT)
 async def hailing_route():
-    now_str = time.strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime())
+    now_str = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     print(f"👋 Hailing route hit at {now_str}")
     return {"status": "OK", "message": "Server is alive", "timestamp": now_str}
+
 
 # === Heartbeat + Scraping Task ===
 async def heartbeat_task():
@@ -429,6 +422,7 @@ async def heartbeat_task():
                 print(f"⚠️ Heartbeat Error: {e}")
             await asyncio.sleep(HEARTBEAT_INTERVAL_SECONDS)
 
+
 # === On Startup ===
 @app.on_event("startup")
 async def startup_event():
@@ -445,25 +439,19 @@ async def get_all_refs():
     return JSONResponse(content=refs)
 
 
-
 @app.post("/subscribe")
 async def subscribe(subscriber: Subscriber):
-    """
-    Handles a new subscriber request and stores the email in MongoDB.
-    """
     try:
-        # Check if the email already exists to prevent duplicates
         existing_subscriber = await subscribers_collection.find_one({"email": subscriber.email})
         if existing_subscriber:
             return JSONResponse(
-                status_code=409,  # 409 Conflict
+                status_code=409,
                 content={"success": False, "message": "Email is already subscribed."}
             )
 
-        # Insert the new subscriber with a timestamp
         await subscribers_collection.insert_one({
             "email": subscriber.email,
-            "subscribed_at": datetime.utcnow()
+            "subscribed_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         })
         print(f"New subscriber added: {subscriber.email}")
         return JSONResponse(
@@ -476,8 +464,4 @@ async def subscribe(subscriber: Subscriber):
         return JSONResponse(
             status_code=500,
             content={"success": False, "message": "An internal server error occurred."}
-
         )
-
-
-
