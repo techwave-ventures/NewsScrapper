@@ -384,7 +384,7 @@ async def fetch_and_process_articles(batch_size: int = 15):
             if not await collection.find_one({"ref": href}):
                 await collection.insert_one(doc)
                 print("✅ Inserted:", href)
-            else:
+            # else:
                 # print("📦 Already exists:", href)
 
             articles.append(doc)
@@ -477,4 +477,5 @@ async def subscribe(subscriber: Subscriber):
             content={"success": False, "message": "An internal server error occurred."}
 
         )
+
 
