@@ -348,10 +348,10 @@ async def fetch_and_process_articles(batch_size: int = 15):
 
             # ✅ Skip dead links
             if res.status_code == 404:
-                print(f"⛔ 404 Not Found: {href}")
+                # print(f"⛔ 404 Not Found: {href}")
                 return
             elif res.status_code != 200:
-                print(f"⚠️ Skipping ({res.status_code}): {href}")
+                # print(f"⚠️ Skipping ({res.status_code}): {href}")
                 return
 
             soup = BeautifulSoup(res.text, "html.parser")
@@ -385,7 +385,7 @@ async def fetch_and_process_articles(batch_size: int = 15):
                 await collection.insert_one(doc)
                 print("✅ Inserted:", href)
             else:
-                print("📦 Already exists:", href)
+                # print("📦 Already exists:", href)
 
             articles.append(doc)
 
@@ -477,3 +477,4 @@ async def subscribe(subscriber: Subscriber):
             content={"success": False, "message": "An internal server error occurred."}
 
         )
+
